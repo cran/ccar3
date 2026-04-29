@@ -1,5 +1,11 @@
 library(ccar3)
 
+expected_cv_names <- c(
+  "U", "V", "lambda", "rmse", "cor",
+  "lambda_x", "lambda_x_se", "lambda_y", "lambda_y_se",
+  "resultsx", "cv_summary", "cv_folds", "Lambda", "B", "fit"
+)
+
 test_that("cca_group_rrr_cv returns correct output structure", {
   set.seed(123)
   r = 2
@@ -19,11 +25,13 @@ test_that("cca_group_rrr_cv returns correct output structure", {
   result <- cca_group_rrr_cv(X, Y, groups=groups, r = 2, kfolds=3, parallelize = FALSE)
   
   expect_type(result, "list")
-  expect_true(all(c("U", "V", "rmse", "cor") %in% names(result)))
+  expect_identical(names(result), expected_cv_names)
   expect_equal(dim(result$U)[2], r)
   expect_equal(dim(result$V)[2], r)
   expect_equal(dim(result$U)[1], 100)
   expect_equal(dim(result$V)[1], 5)
+  expect_true(all(c("lambda", "rmse", "se") %in% names(result$cv_summary)))
+  expect_true(all(c("lambda", "fold", "rmse") %in% names(result$cv_folds)))
 })
 
 
@@ -49,6 +57,8 @@ test_that("cca_group_rrr_cv can run in parallel", {
   expect_type(result, "list")
   expect_true(subdistance(result$U, gen$u) < 0.35)  
   expect_true(subdistance(result$V, gen$v) < 0.35)
+  expect_true(nrow(result$cv_summary) > 0)
+  expect_true(nrow(result$cv_folds) > 0)
 })
 
 
@@ -69,14 +79,82 @@ test_that("cca_group_rrr_cv returns the correct answer", {
   X = gen$X
   Y = gen$Y
   groups = gen$groups
-  result <- cca_rrr_cv(X, Y, r = r,
-                      solver = "ADMM", lambdas=10^seq(-5, 1.5, length.out = 100),
-                      kfolds=3, r, parallelize = TRUE,
-                      LW_Sy = TRUE)
+  result <- cca_group_rrr_cv(
+    X, Y, groups = groups, r = r,
+    solver = "ADMM", lambdas = 10^seq(-5, 1.5, length.out = 30),
+    kfolds = 3, parallelize = FALSE,
+    LW_Sy = TRUE
+  )
   
   expect_type(result, "list")
   expect_true(subdistance(result$U, gen$u) < 0.35)  
   expect_true(subdistance(result$V, gen$v) < 0.35)
+  expect_true(nrow(result$cv_summary) > 0)
+  expect_true(nrow(result$cv_folds) > 0)
 })
 
+test_that("cca_group_rrr_cv supports preprocess modes and p > n", {
+  set.seed(42)
+  n <- 50
+  p <- 100
+  q <- 5
+  r <- 2
+  X <- matrix(rnorm(n * p), n, p)
+  Y <- matrix(rnorm(n * q), n, q)
+  groups <- split(seq_len(p), ceiling(seq_len(p) / 5))
 
+  result <- cca_group_rrr_cv(
+    X, Y, groups = groups, r = r,
+    kfolds = 3, parallelize = FALSE, lambdas = c(0.001, 0.01),
+    preprocess = "center", LW_Sy = FALSE, niter = 300
+  )
+
+  expect_type(result, "list")
+  expect_identical(names(result), expected_cv_names)
+})
+
+test_that("cca_group_rrr_cv forwards matrix-free ADMM controls", {
+  set.seed(99)
+  n <- 60
+  p <- 90
+  q <- 4
+  r <- 2
+  X <- matrix(rnorm(n * p), n, p)
+  Y <- matrix(rnorm(n * q), n, q)
+  groups <- split(seq_len(p), ceiling(seq_len(p) / 5))
+
+  result <- cca_group_rrr_cv(
+    X, Y, groups = groups, r = r,
+    lambdas = c(0.001, 0.01), kfolds = 3, parallelize = FALSE,
+    preprocess = "center", LW_Sy = FALSE, niter = 150,
+    matrix_free_threshold = 1L,
+    cg_tol = 1e-5,
+    cg_maxiter = 40
+  )
+
+  expect_type(result, "list")
+  expect_equal(dim(result$U), c(p, r))
+  expect_equal(dim(result$V), c(q, r))
+})
+
+test_that("cca_group_rrr_cv_folds honors preprocessing modes on raw inputs", {
+  set.seed(71)
+  X <- matrix(rnorm(72 * 12), 72, 12)
+  Y <- matrix(rnorm(72 * 4), 72, 4)
+  groups <- split(seq_len(ncol(X)), ceiling(seq_len(ncol(X)) / 3))
+  folds <- ccar3:::.create_cv_folds(nrow(X), 3)
+
+  fold_values <- ccar3:::cca_group_rrr_cv_folds(
+    X, Y, groups = groups,
+    Sx = NULL, Sy = NULL,
+    kfolds = 3, lambda = 0.01, r = 2,
+    preprocess = "center",
+    LW_Sy = FALSE,
+    niter = 200,
+    folds = folds,
+    return_fold_values = TRUE
+  )
+
+  expect_length(fold_values, length(folds))
+  expect_false(all(is.na(fold_values)))
+})

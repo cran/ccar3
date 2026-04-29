@@ -24,15 +24,216 @@ gca_to_cca <-
   }
 
 
-  #' Set up a parallel backend with graceful fallbacks.
-#'
-#' Attempts to create a parallel cluster, first trying the efficient FORK
-#' method (on Unix-like systems), then falling back to PSOCK, and finally
-#' returning NULL if all attempts fail.
-#'
-#' @param num_cores The number of cores to use. If NULL, it's determined automatically.
-#' @param verbose If TRUE, prints messages about the setup process.
-#' @return A cluster object `cl` on success, or `NULL` on failure.
+# Set up a parallel backend with graceful fallbacks.
+#
+# Attempts to create a parallel cluster, first trying the efficient FORK
+# method (on Unix-like systems), then falling back to PSOCK, and finally
+# returning NULL if all attempts fail.
+
+cleanup_parallel_backend <- function(cl = NULL, verbose = FALSE) {
+  if (!is.null(cl)) {
+    try(parallel::stopCluster(cl), silent = !verbose)
+  }
+
+  if (requireNamespace("foreach", quietly = TRUE)) {
+    foreach::registerDoSEQ()
+  }
+
+  if (requireNamespace("doParallel", quietly = TRUE) &&
+      exists("stopImplicitCluster", envir = asNamespace("doParallel"), inherits = FALSE)) {
+    try(doParallel::stopImplicitCluster(), silent = !verbose)
+  }
+
+  invisible(NULL)
+}
+
+.safe_mean_na <- function(x) {
+  out <- mean(x, na.rm = TRUE)
+  if (is.nan(out)) NA_real_ else out
+}
+
+.safe_sd_na <- function(x) {
+  out <- stats::sd(x, na.rm = TRUE)
+  if (is.nan(out)) NA_real_ else out
+}
+
+.create_cv_folds <- function(n, k) {
+  n <- as.integer(n)
+  k <- as.integer(k)
+
+  if (length(n) != 1L || is.na(n) || n < 2L) {
+    stop("`n` must be a single integer >= 2.", call. = FALSE)
+  }
+  if (length(k) != 1L || is.na(k) || k < 2L) {
+    stop("`k` must be a single integer >= 2.", call. = FALSE)
+  }
+
+  k <- min(k, n)
+  fold_ids <- sample(rep(seq_len(k), length.out = n))
+  unname(split(seq_len(n), fold_ids))
+}
+
+.find_local_global_names <- function(fun) {
+  if (!requireNamespace("codetools", quietly = TRUE)) {
+    return(character())
+  }
+
+  env <- environment(fun)
+  if (is.null(env)) {
+    return(character())
+  }
+
+  globals <- tryCatch(codetools::findGlobals(fun, merge = FALSE), error = function(e) NULL)
+  if (is.null(globals)) {
+    return(character())
+  }
+
+  names <- unique(c(globals$variables, globals$functions))
+  names <- names[nzchar(names) & !grepl("^[[:punct:]]+$", names)]
+
+  binding_env <- function(name, start) {
+    cur <- start
+    while (!identical(cur, emptyenv())) {
+      if (exists(name, envir = cur, inherits = FALSE)) {
+        return(cur)
+      }
+      cur <- parent.env(cur)
+    }
+    NULL
+  }
+
+  keep <- vapply(names, function(name) {
+    where <- binding_env(name, env)
+    if (is.null(where) || identical(where, baseenv())) {
+      return(FALSE)
+    }
+
+    if ("ccar3" %in% loadedNamespaces()) {
+      ccar3_ns <- asNamespace("ccar3")
+      if (exists(name, envir = ccar3_ns, inherits = FALSE)) {
+        return(FALSE)
+      }
+    }
+
+    env_name <- environmentName(where)
+    identical(where, globalenv()) || identical(env_name, "")
+  }, logical(1))
+
+  names[keep]
+}
+
+initialize_parallel_workers <- function(cl,
+                                        pkg = "ccar3",
+                                        pkg_path = NULL,
+                                        verbose = FALSE) {
+  if (is.null(cl)) {
+    return(invisible(NULL))
+  }
+
+  parallel::clusterEvalQ(cl, {
+    Sys.setenv(
+      KMP_SHM_DISABLE = 1,
+      KMP_SHM_DIR = "/tmp",
+      TMPDIR = "/tmp",
+      OMP_NUM_THREADS = 1,
+      OPENBLAS_NUM_THREADS = 1,
+      MKL_NUM_THREADS = 1,
+      VECLIB_MAXIMUM_THREADS = 1
+    )
+    NULL
+  })
+
+  if (is.null(pkg_path)) {
+    option_path <- getOption("ccar3_pkg_path", default = NULL)
+    if (!is.null(option_path) &&
+        nzchar(option_path) &&
+        file.exists(file.path(option_path, "DESCRIPTION")) &&
+        file.exists(file.path(option_path, "NAMESPACE"))) {
+      pkg_path <- option_path
+    }
+  }
+
+  if (is.null(pkg_path)) {
+    env_path <- Sys.getenv("CCAR3_PKG_PATH", unset = "")
+    if (nzchar(env_path) &&
+        file.exists(file.path(env_path, "DESCRIPTION")) &&
+        file.exists(file.path(env_path, "NAMESPACE"))) {
+      pkg_path <- env_path
+    }
+  }
+
+  if (is.null(pkg_path)) {
+    ns_path <- tryCatch({
+      if (requireNamespace("pkgload", quietly = TRUE) &&
+          pkg %in% loadedNamespaces() &&
+          pkgload::is_dev_package(pkg)) {
+        getNamespaceInfo(asNamespace(pkg), "path")
+      } else {
+        ""
+      }
+    }, error = function(e) "")
+
+    if (nzchar(ns_path) &&
+        file.exists(file.path(ns_path, "DESCRIPTION")) &&
+        file.exists(file.path(ns_path, "NAMESPACE"))) {
+      pkg_path <- ns_path
+    }
+  }
+
+  if (is.null(pkg_path)) {
+    wd <- tryCatch(normalizePath(getwd(), mustWork = FALSE), error = function(e) "")
+    if (nzchar(wd) &&
+        file.exists(file.path(wd, "DESCRIPTION")) &&
+        file.exists(file.path(wd, "NAMESPACE"))) {
+      pkg_path <- wd
+    }
+  }
+
+  if (!is.null(pkg_path) && nzchar(pkg_path)) {
+    if (requireNamespace("pkgload", quietly = TRUE)) {
+      if (verbose) {
+        cat("Initializing workers from source package at", pkg_path, "\n")
+      }
+      parallel::clusterCall(cl, function(path) {
+        pkgload::load_all(
+          path,
+          quiet = TRUE,
+          export_all = FALSE,
+          helpers = FALSE,
+          attach_testthat = FALSE
+        )
+        NULL
+      }, pkg_path)
+    } else {
+      if (verbose) {
+        cat("Initializing workers by sourcing R files from", pkg_path, "\n")
+      }
+      parallel::clusterCall(cl, function(path) {
+        r_dir <- file.path(path, "R")
+        r_files <- c(
+          file.path(r_dir, "helpers.r"),
+          file.path(r_dir, "utils.R"),
+          sort(list.files(r_dir, pattern = "\\.[Rr]$", full.names = TRUE))
+        )
+        r_files <- unique(r_files[file.exists(r_files)])
+        for (f in r_files) {
+          source(f, local = .GlobalEnv)
+        }
+        NULL
+      }, pkg_path)
+    }
+  } else {
+    if (verbose) {
+      cat("Initializing workers with installed package", pkg, "\n")
+    }
+    parallel::clusterCall(cl, function(pkg_name) {
+      suppressPackageStartupMessages(library(pkg_name, character.only = TRUE))
+      NULL
+    }, pkg)
+  }
+
+  invisible(NULL)
+}
 
 setup_parallel_backend <- function(num_cores = NULL, verbose = FALSE) {
 
@@ -47,42 +248,101 @@ setup_parallel_backend <- function(num_cores = NULL, verbose = FALSE) {
   if (verbose){
      cat(paste("\nAttempting to set up parallel backend with", num_cores, "cores.\n"))
   }
-  
-  
   cl <- NULL
-  
-  # Use a nested tryCatch to attempt different cluster types
-  tryCatch({
-    # The preferred method for Unix/macOS/Linux is FORK
-    if (.Platform$OS.type == "unix") {
-      if (verbose){
-        cat("Unix-like system detected. Trying FORK backend (most efficient)...\n")
-      }
-      cl <- parallel::makeCluster(num_cores, type = "FORK")
-    } else {
-      # The only method for Windows is PSOCK
-      if (verbose){
-          cat("Windows system detected. Trying PSOCK backend...\n")
-      }
-      cl <- parallel::makeCluster(num_cores, type = "PSOCK")
+  sysname <- Sys.info()[["sysname"]]
+  prefer_fork <- .Platform$OS.type == "unix" && !identical(sysname, "Darwin")
+
+  if (prefer_fork) {
+    if (verbose) {
+      cat("Unix-like system detected. Trying FORK backend first...\n")
     }
-  }, error = function(e_fork) {
-    # This block runs if the first attempt (e.g., FORK) failed
- 
-      cat(crayon::yellow("Initial backend setup failed with error: ", e_fork$message, "\n"))
+    cl <- tryCatch(
+      parallel::makeCluster(num_cores, type = "FORK"),
+      error = function(e_fork) {
+        if (requireNamespace("crayon", quietly = TRUE)) {
+          cat(crayon::yellow("Initial FORK backend setup failed: ", e_fork$message, "\n"))
+        } else {
+          cat("Initial FORK backend setup failed:", e_fork$message, "\n")
+        }
+        NULL
+      }
+    )
+  } else if (verbose) {
+    if (identical(sysname, "Darwin")) {
+      cat("macOS detected. Using PSOCK backend to avoid orphaned FORK workers on interrupts...\n")
+    } else {
+      cat("Using PSOCK backend...\n")
+    }
+  }
+
+  if (is.null(cl)) {
+    if (verbose && prefer_fork) {
       cat("Attempting fallback PSOCK backend...\n")
-    
-    
-    # Second attempt: Try PSOCK, which works everywhere but may be blocked
-    tryCatch({
-      cl <<- parallel::makeCluster(num_cores, type = "PSOCK")
-    }, error = function(e_psock) {
-      # This block runs if PSOCK also fails
-      cat(crayon::red("PSOCK setup also failed: ", e_psock$message, "\n"))
-      # cl remains NULL
-    })
-  })
-  
+    }
+    cl <- tryCatch(
+      parallel::makeCluster(num_cores, type = "PSOCK"),
+      error = function(e_psock) {
+        if (requireNamespace("crayon", quietly = TRUE)) {
+          cat(crayon::red("PSOCK setup also failed: ", e_psock$message, "\n"))
+        } else {
+          cat("PSOCK setup also failed:", e_psock$message, "\n")
+        }
+        NULL
+      }
+    )
+  }
+
   return(cl)
 }
 
+run_lambda_jobs <- function(lambdas,
+                            run_one,
+                            parallelize = TRUE,
+                            nb_cores = NULL,
+                            packages = character(),
+                            exports = NULL,
+                            verbose = FALSE) {
+  if (!parallelize) {
+    return(lapply(lambdas, run_one))
+  }
+
+  if (!requireNamespace("doParallel", quietly = TRUE)) {
+    stop("Package 'doParallel' must be installed to use the parallelization option.",
+         call. = FALSE)
+  }
+
+  if (!requireNamespace("crayon", quietly = TRUE)) {
+    stop("Package 'crayon' must be installed to use the parallelization option.",
+         call. = FALSE)
+  }
+
+  cl <- setup_parallel_backend(nb_cores, verbose = verbose)
+  if (is.null(cl)) {
+    warning("Parallel setup failed; running CV serially.", immediate. = TRUE)
+    return(lapply(lambdas, run_one))
+  }
+
+  initialize_parallel_workers(cl, verbose = verbose)
+  local_env <- environment(run_one)
+  local_names <- if (is.null(local_env)) character() else ls(envir = local_env, all.names = TRUE)
+  local_names <- setdiff(local_names, "run_one")
+  if (length(local_names) > 0) {
+    parallel::clusterExport(cl, varlist = local_names, envir = local_env)
+  }
+
+  global_names <- unique(c(exports, .find_local_global_names(run_one)))
+  global_names <- setdiff(global_names, c("run_one", local_names))
+  global_names <- global_names[vapply(global_names, exists, logical(1), envir = globalenv(), inherits = FALSE)]
+  if (length(global_names) > 0) {
+    parallel::clusterExport(cl, varlist = global_names, envir = globalenv())
+  }
+
+  parallel::clusterExport(cl, varlist = "run_one", envir = parent.frame())
+  doParallel::registerDoParallel(cl)
+  on.exit(cleanup_parallel_backend(cl), add = TRUE)
+
+  foreach::foreach(
+    lambda = lambdas,
+    .packages = unique(c(packages, "foreach"))
+  ) %dopar% run_one(lambda)
+}

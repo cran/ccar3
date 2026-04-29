@@ -13,12 +13,16 @@ cca_group_rrr_cv(
   kfolds = 5,
   parallelize = FALSE,
   standardize = FALSE,
+  preprocess = NULL,
   LW_Sy = TRUE,
   solver = "ADMM",
   rho = 1,
-  thresh_0 = 1e-06,
+  thresh_0 = 0,
   niter = 10000,
   thresh = 1e-04,
+  matrix_free_threshold = 4000L,
+  cg_tol = 1e-06,
+  cg_maxiter = NULL,
   verbose = FALSE,
   nb_cores = NULL
 )
@@ -38,11 +42,14 @@ cca_group_rrr_cv(
 
 \item{parallelize}{Whether to use parallel processing (default is FALSE)}
 
-\item{standardize}{Whether to scale variables}
+\item{standardize}{Backward-compatible preprocessing flag: TRUE = \code{"scale"}, FALSE = \code{"center"}.}
+
+\item{preprocess}{Preprocessing mode. One of \code{"scale"} (center + scale), \code{"center"} (center only), or \code{"none"}.}
 
 \item{LW_Sy}{Whether to apply Ledoit-Wolf shrinkage to Sy (default TRUE)}
 
-\item{solver}{Either "ADMM" or "CVXR"}
+\item{solver}{Either "ADMM" or "CVXR". The \code{"CVXR"} backend requires the
+optional package \code{CVXR}.}
 
 \item{rho}{ADMM parameter}
 
@@ -51,6 +58,12 @@ cca_group_rrr_cv(
 \item{niter}{Maximum number of ADMM iterations}
 
 \item{thresh}{Convergence threshold for ADMM}
+
+\item{matrix_free_threshold}{For ADMM: when both \code{n} and \code{p} are at least this value, use a matrix-free conjugate-gradient solve instead of forming a dense linear system.}
+
+\item{cg_tol}{Relative tolerance for the matrix-free conjugate-gradient solve used in ADMM.}
+
+\item{cg_maxiter}{Maximum iterations for the matrix-free conjugate-gradient solve. Defaults to \code{min(p, 1000)}.}
 
 \item{verbose}{Print diagnostics}
 
@@ -64,6 +77,16 @@ A list with elements:
 \item{lambda}{Optimal regularisation parameter lambda chosen by CV}
 \item{rmse}{Mean squared error of prediction (as computed in the CV)}
 \item{cor}{Canonical covariances}
+\item{lambda_x}{Alias of the selected \code{lambda}}
+\item{lambda_x_se}{Foldwise standard error at the selected \code{lambda}}
+\item{lambda_y}{Placeholder for symmetry with two-penalty interfaces}
+\item{lambda_y_se}{Placeholder for symmetry with two-penalty interfaces}
+\item{resultsx}{Backward-compatible alias of \code{cv_summary}}
+\item{cv_summary}{Data frame with one row per lambda containing mean RMSE and its foldwise standard error}
+\item{cv_folds}{Data frame with fold-level RMSE values for each lambda}
+\item{Lambda}{Canonical correlations from the final fit}
+\item{B}{Estimated reduced-rank coefficient matrix from the final fit}
+\item{fit}{Final fit at the selected lambda}
 }
 }
 \description{

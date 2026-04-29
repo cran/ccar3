@@ -13,7 +13,8 @@ cca_graph_rrr_cv(
   kfolds = 5,
   parallelize = FALSE,
   standardize = TRUE,
-  LW_Sy = FALSE,
+  LW_Sy = TRUE,
+  preprocess = NULL,
   rho = 10,
   niter = 10000,
   thresh = 1e-04,
@@ -38,9 +39,11 @@ cca_graph_rrr_cv(
 
 \item{parallelize}{Whether to parallelize cross-validation}
 
-\item{standardize}{Whether to center and scale X and Y (default FALSE = center only)}
+\item{standardize}{Backward-compatible preprocessing flag: TRUE = \code{"scale"}, FALSE = \code{"center"}.}
 
 \item{LW_Sy}{Whether to apply Ledoit-Wolf shrinkage to Sy}
+
+\item{preprocess}{Preprocessing mode. One of \code{"scale"} (center + scale), \code{"center"} (center only), or \code{"none"}.}
 
 \item{rho}{ADMM penalty parameter}
 
@@ -54,7 +57,7 @@ cca_graph_rrr_cv(
 
 \item{Gamma_dagger}{Optional pseudoinverse of Gamma (computed if NULL)}
 
-\item{nb_cores}{Number of cores to use for parallelization (default is all available cores minus 1)}
+\item{nb_cores}{Number of cores to use for parallelization. Defaults to min(kfolds, available cores minus 1).}
 }
 \value{
 A list with elements:
@@ -64,6 +67,16 @@ A list with elements:
 \item{lambda}{Optimal regularisation parameter lambda chosen by CV}
 \item{rmse}{Mean squared error of prediction (as computed in the CV)}
 \item{cor}{Canonical covariances}
+\item{lambda_x}{Alias of the selected \code{lambda}}
+\item{lambda_x_se}{Foldwise standard error at the selected \code{lambda}}
+\item{lambda_y}{Placeholder for symmetry with two-penalty interfaces}
+\item{lambda_y_se}{Placeholder for symmetry with two-penalty interfaces}
+\item{resultsx}{Backward-compatible alias of \code{cv_summary}}
+\item{cv_summary}{Data frame with one row per lambda containing mean RMSE and its foldwise standard error}
+\item{cv_folds}{Data frame with fold-level RMSE values for each lambda}
+\item{Lambda}{Canonical correlations from the final fit}
+\item{B}{Estimated reduced-rank coefficient matrix from the final fit}
+\item{fit}{Final fit at the selected lambda}
 }
 }
 \description{

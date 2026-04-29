@@ -1,6 +1,3 @@
-# LIBRARIES
-library(MASS)
-
 #' Function to perform Sparse CCA based on Wilms and Croux (2018)
 #'  REFERENCE Wilms, I., & Croux, C. (2018). Sparse canonical correlation analysis using alternating regressions. Journal of Computational and Graphical Statistics, 27(1), 1-10.
 #' @param X Matrix of predictors (n x p)
@@ -386,4 +383,3 @@ cvfunction <- function(U, n, Xmatrix, Ymatrix, lambda1, lambda2, ncvsample){
   cv <-  cv + abs(cor(xscore, yscore, use="pairwise"))
   return(cv)
 }
-

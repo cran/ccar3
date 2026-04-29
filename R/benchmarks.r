@@ -19,8 +19,8 @@ sparse_CCA_benchmarks <- function(X_train, Y_train, S=NULL,
                               lambday = c(0, 1e-7, 1e-6, 1e-5),
                               standardize = TRUE){
 
-  X_train = as.matrix(data.frame(X_train) %>% dplyr::mutate_all(~replace_na(., mean(., na.rm = TRUE))))
-  Y_train = as.matrix(data.frame(Y_train) %>% dplyr::mutate_all(~replace_na(., mean(., na.rm = TRUE))))
+  X_train = as.matrix(data.frame(X_train) %>% dplyr::mutate_all(~tidyr::replace_na(., mean(., na.rm = TRUE))))
+  Y_train = as.matrix(data.frame(Y_train) %>% dplyr::mutate_all(~tidyr::replace_na(., mean(., na.rm = TRUE))))
   p1 <- dim(X_train)[2]
   p2 <- dim(Y_train)[2]
   p <- p1 + p2;
@@ -88,8 +88,12 @@ sparse_CCA_benchmarks <- function(X_train, Y_train, S=NULL,
       stop("Package  'PMA' must be installed to use the Witten approach.",
           call. = FALSE)
     }
-    Witten_CV<-Witten.CV(X=X_train,Y=Y_train, n.cv=5,lambdax=lambdax[which(lambdax < 1)],
-                         lambday=lambdax[which(lambdax < 1)])
+    Witten_CV <- Witten.CV(
+      X = X_train, Y = Y_train, n.cv = 5, rank = rank,
+      lambdax = lambdax[which(lambdax < 1)],
+      lambday = lambday[which(lambdax < 1)],
+      standardize = standardize
+    )
     
     method <-PMA::CCA(x=X_train,z=Y_train,typex="standard",typez="standard",
                  K=rank,penaltyx=Witten_CV$lambdax.opt,

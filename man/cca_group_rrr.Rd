@@ -14,12 +14,16 @@ cca_group_rrr(
   lambda = 0,
   r,
   standardize = FALSE,
+  preprocess = NULL,
   LW_Sy = TRUE,
   solver = "ADMM",
   rho = 1,
   niter = 10000,
   thresh = 1e-04,
   thresh_0 = 1e-06,
+  matrix_free_threshold = 4000L,
+  cg_tol = 1e-06,
+  cg_maxiter = NULL,
   verbose = FALSE
 )
 }
@@ -40,11 +44,14 @@ cca_group_rrr(
 
 \item{r}{Target rank}
 
-\item{standardize}{Whether to scale variables}
+\item{standardize}{Backward-compatible preprocessing flag: TRUE = \code{"scale"}, FALSE = \code{"center"}.}
+
+\item{preprocess}{Preprocessing mode. One of \code{"scale"} (center + scale), \code{"center"} (center only), or \code{"none"}.}
 
 \item{LW_Sy}{Whether to apply Ledoit-Wolf shrinkage to Sy (default TRUE)}
 
-\item{solver}{Either "ADMM" or "CVXR"}
+\item{solver}{Either "ADMM" or "CVXR". The \code{"CVXR"} backend requires the
+optional package \code{CVXR}.}
 
 \item{rho}{ADMM parameter}
 
@@ -53,6 +60,12 @@ cca_group_rrr(
 \item{thresh}{Convergence threshold for ADMM}
 
 \item{thresh_0}{tolerance for declaring entries non-zero}
+
+\item{matrix_free_threshold}{For ADMM: when both \code{n} and \code{p} are at least this value, use a matrix-free conjugate-gradient solve instead of forming a dense linear system.}
+
+\item{cg_tol}{Relative tolerance for the matrix-free conjugate-gradient solve used in ADMM.}
+
+\item{cg_maxiter}{Maximum iterations for the matrix-free conjugate-gradient solve. Defaults to \code{min(p, 1000)}.}
 
 \item{verbose}{Print diagnostics}
 }
@@ -63,6 +76,8 @@ A list with elements:
 \item{V}{Canonical direction matrix for Y (q x r)}
 \item{cor}{Canonical covariances}
 \item{loss}{The prediction error 1/n * \| XU - YV\|^2}
+\item{Lambda}{Canonical correlations}
+\item{B_opt}{Estimated reduced-rank coefficient matrix}
 }
 }
 \description{

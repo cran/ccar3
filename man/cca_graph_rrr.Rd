@@ -14,6 +14,7 @@ cca_graph_rrr(
   lambda = 0,
   r,
   standardize = FALSE,
+  preprocess = NULL,
   LW_Sy = TRUE,
   rho = 10,
   niter = 10000,
@@ -30,7 +31,7 @@ cca_graph_rrr(
 
 \item{Gamma}{Graph constraint matrix (g x p)}
 
-\item{Sx}{Optional covariance matrix for X. If NULL, computed as t(X) \%*\% X / n}
+\item{Sx}{Optional covariance matrix for X. Kept for backward compatibility; the graph fit now postprocesses directly from \code{X} and does not need to form \code{Sx}.}
 
 \item{Sy}{Optional covariance matrix for Y. If NULL, computed similarly; optionally shrunk via Ledoit-Wolf}
 
@@ -40,7 +41,9 @@ cca_graph_rrr(
 
 \item{r}{Target rank}
 
-\item{standardize}{Whether to center and scale X and Y (default FALSE = center only)}
+\item{standardize}{Backward-compatible preprocessing flag: TRUE = \code{"scale"}, FALSE = \code{"center"}.}
+
+\item{preprocess}{Preprocessing mode. One of \code{"scale"} (center + scale), \code{"center"} (center only), or \code{"none"}.}
 
 \item{LW_Sy}{Whether to apply Ledoit-Wolf shrinkage to Sy}
 
@@ -63,6 +66,8 @@ A list with elements:
 \item{V}{Canonical direction matrix for Y (q x r)}
 \item{cor}{Canonical covariances}
 \item{loss}{The prediction error 1/n * \| XU - YV\|^2}
+\item{Lambda}{Canonical correlations}
+\item{B_opt}{Estimated reduced-rank coefficient matrix}
 }
 }
 \description{

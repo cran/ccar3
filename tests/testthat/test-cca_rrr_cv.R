@@ -1,5 +1,11 @@
 library(ccar3)
 
+expected_cv_names <- c(
+  "U", "V", "lambda", "rmse", "cv_score", "cv_metric", "cor",
+  "lambda_x", "lambda_x_se", "lambda_y", "lambda_y_se",
+  "resultsx", "cv_summary", "cv_folds", "Lambda", "B", "fit"
+)
+
 test_that("cca_rrr_cv returns correct output structure", {
   set.seed(123)
   r = 2
@@ -17,11 +23,13 @@ test_that("cca_rrr_cv returns correct output structure", {
   result <- cca_rrr_cv(X, Y, r = r, kfolds=3, parallelize = FALSE)
   
   expect_type(result, "list")
-  expect_true(all(c("U", "V", "rmse", "lambda", "cor") %in% names(result)))
+  expect_identical(names(result), expected_cv_names)
   expect_equal(dim(result$U)[2], r)
   expect_equal(dim(result$V)[2], r)
   expect_equal(dim(result$U)[1], 50)
   expect_equal(dim(result$V)[1], 10)
+  expect_true(all(c("lambda", "rmse", "se") %in% names(result$cv_summary)))
+  expect_true(all(c("lambda", "fold", "rmse") %in% names(result$cv_folds)))
 })
 
 test_that("cca_rrr_cv can run in parallel", {
@@ -42,7 +50,7 @@ test_that("cca_rrr_cv can run in parallel", {
   result <- cca_rrr_cv(X, Y, r = r, kfolds=3, parallelize = TRUE)
   
   expect_type(result, "list")
-  expect_true(all(c("U", "V", "rmse", "lambda", "cor") %in% names(result)))
+  expect_identical(names(result), expected_cv_names)
   expect_equal(dim(result$U)[2], r)
   expect_equal(dim(result$V)[2], r)
   expect_equal(dim(result$U)[1], 50)
@@ -75,8 +83,27 @@ test_that("cca_rrr_cv returns the correct answer", {
   expect_true(subdistance(result$V, gen$v) < 0.2)
   expect_equal(dim(result$U)[2], r)
   expect_equal(dim(result$V)[2], r)
+  expect_true(nrow(result$cv_summary) > 0)
+  expect_true(nrow(result$cv_folds) > 0)
 })
 
+test_that("cca_rrr_cv_folds honors preprocessing modes on raw inputs", {
+  set.seed(17)
+  X <- matrix(rnorm(75 * 12), 75, 12)
+  Y <- matrix(rnorm(75 * 4), 75, 4)
+  folds <- ccar3:::.create_cv_folds(nrow(X), 3)
 
+  fold_values <- ccar3:::cca_rrr_cv_folds(
+    X, Y, Sx = NULL, Sy = NULL,
+    kfolds = 3, lambda = 0.01, r = 2,
+    solver = "ADMM",
+    preprocess = "center",
+    LW_Sy = FALSE,
+    niter = 200,
+    folds = folds,
+    return_fold_values = TRUE
+  )
 
-
+  expect_length(fold_values, length(folds))
+  expect_false(all(is.na(fold_values)))
+})

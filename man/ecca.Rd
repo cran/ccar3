@@ -2,63 +2,57 @@
 % Please edit documentation in R/ecca.r
 \name{ecca}
 \alias{ecca}
-\title{Sparse Canonical Correlation via Reduced-Rank Regression when both X and Y are high-dimensional.}
+\title{Efficient CCA for Two High-Dimensional Views}
 \usage{
 ecca(
   X,
   Y,
   lambda = 0,
   groups = NULL,
-  Sx = NULL,
-  Sy = NULL,
-  Sxy = NULL,
   r = 2,
   standardize = FALSE,
   rho = 1,
   B0 = NULL,
   eps = 1e-04,
   maxiter = 500,
-  verbose = TRUE
+  verbose = TRUE,
+  epsilon_sv = 1e-08,
+  ridge_whiten = 1e-08
 )
 }
 \arguments{
-\item{X}{Predictor matrix (n x p)}
+\item{X}{Predictor matrix (n x p).}
 
-\item{Y}{Response matrix (n x q)}
+\item{Y}{Response matrix (n x q).}
 
-\item{lambda}{Regularization parameter}
+\item{lambda}{Regularization parameter.}
 
-\item{groups}{List of index vectors defining groups of predictors}
+\item{groups}{Optional group structure for blockwise sparsity.}
 
-\item{Sx}{precomputed covariance matrix for X (optional)}
+\item{r}{Target rank.}
 
-\item{Sy}{precomputed covariance matrix for Y (optional)}
+\item{standardize}{Whether to scale variables after centering.}
 
-\item{Sxy}{precomputed covariance matrix between X and Y (optional)}
+\item{rho}{ADMM penalty parameter.}
 
-\item{r}{Target rank}
+\item{B0}{Optional warm start for the coefficient matrix.}
 
-\item{standardize}{Whether to scale variables}
+\item{eps}{Convergence tolerance for ADMM.}
 
-\item{rho}{ADMM parameter}
+\item{maxiter}{Maximum number of ADMM iterations.}
 
-\item{B0}{Initial value for the coefficient matrix (optional)}
+\item{verbose}{Whether to print diagnostics.}
 
-\item{eps}{Convergence threshold for ADMM}
+\item{epsilon_sv}{Numerical threshold used to discard near-zero singular values.}
 
-\item{maxiter}{Maximum number of ADMM iterations}
-
-\item{verbose}{Print diagnostics}
+\item{ridge_whiten}{Ridge added when whitening Gram matrices.}
 }
 \value{
-A list with elements:
-\describe{
-\item{U}{Canonical direction matrix for X (p x r)}
-\item{V}{Canonical direction matrix for Y (q x r)}
-\item{cor}{Canonical covariances}
-\item{loss}{The prediction error 1/n * \| XU - YV\|^2}
-}
+A list containing the estimated canonical directions, canonical
+correlations, the fitted coefficient matrix, preprocessing metadata, and
+convergence information.
 }
 \description{
-Performs group-sparse reduced-rank regression for CCA using either ADMM or CVXR solvers.
+Fits sparse canonical directions with an ADMM-based reduced-rank regression
+formulation tailored to the setting where both views are high-dimensional.
 }

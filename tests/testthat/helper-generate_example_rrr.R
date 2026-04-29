@@ -1,5 +1,4 @@
 library(pracma)
-library(caret)
 
 
 generate_example_sparse_U <- function(n, p1, p2,
@@ -167,7 +166,7 @@ generate_example_group <- function(n, p1, p2,
   #}
   Lambda_pca <- rep(lambda_pca, r_pca)
   # generate covariance matrix for X and Y
-  groups <- createFolds(1:p1, k = ceiling(p1/5), list = TRUE, returnTrain = FALSE) ### creates groups of equal size
+  groups <- ccar3:::.create_cv_folds(p1, ceiling(p1 / 5)) ### creates groups of equal size
   s <- c()
   for (i in 1:nnzeros){
     s <- c(s, groups[[i]])
@@ -528,4 +527,3 @@ generate_example_none_trivial_pca <- function(n, p1, p2,
               Sigmax=Sigmax, Sigmay=Sigmay
   ))
 }
-

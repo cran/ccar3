@@ -14,11 +14,16 @@ cca_rrr(
   highdim = TRUE,
   solver = "ADMM",
   LW_Sy = TRUE,
-  standardize = TRUE,
+  mode = "sqrtm_norm",
+  standardize = FALSE,
+  preprocess = NULL,
   rho = 1,
   niter = 10000,
   thresh = 1e-04,
-  thresh_0 = 1e-06,
+  thresh_0 = 0,
+  matrix_free_threshold = 4000L,
+  cg_tol = 1e-06,
+  cg_maxiter = NULL,
   verbose = FALSE
 )
 }
@@ -37,11 +42,24 @@ cca_rrr(
 
 \item{highdim}{Boolean for high-dimensional regime.}
 
-\item{solver}{Solver type: "rrr", "CVX", or "ADMM".}
+\item{solver}{Solver type: "rrr", "CVX", or "ADMM". The \code{"CVX"} backend
+requires the optional package \code{CVXR}.}
 
 \item{LW_Sy}{Whether to use Ledoit-Wolf shrinkage for Sy.}
 
-\item{standardize}{Logical; should X and Y be scaled.}
+\item{mode}{Mode for postprocessing the RRR solution. One of \code{"sqrtm_norm"}
+(default) or \code{"product_norm"}. Legacy aliases \code{"new"} and \code{"old"} are
+also accepted. The former whitens the canonical variates to have identity
+covariance, while the latter does not whiten and instead returns the raw
+SVD factors of the RRR solution. The \code{"product_norm"} mode may be more
+interpretable in some cases but can yield canonical variates with very
+different scales and is not guaranteed to be numerically stable when the
+RRR solution is very low-rank or nearly low-rank.}
+
+\item{standardize}{Backward-compatible preprocessing flag: TRUE = \code{"scale"}, FALSE = \code{"center"}.}
+
+\item{preprocess}{Preprocessing mode. One of \code{"scale"} (center + scale), \code{"center"} (center only), or \code{"none"}.
+Logical values are still accepted for backward compatibility: \code{TRUE} uses \code{standardize}, \code{FALSE} skips preprocessing.}
 
 \item{rho}{ADMM parameter.}
 
@@ -50,6 +68,12 @@ cca_rrr(
 \item{thresh}{Convergence threshold.}
 
 \item{thresh_0}{For the ADMM solver: Set entries whose absolute value is below this to 0 (default 1e-6).}
+
+\item{matrix_free_threshold}{For ADMM: when both \code{n} and \code{p} are at least this value, use a matrix-free conjugate-gradient solve instead of forming a dense linear system.}
+
+\item{cg_tol}{Relative tolerance for the matrix-free conjugate-gradient solve used in ADMM.}
+
+\item{cg_maxiter}{Maximum iterations for the matrix-free conjugate-gradient solve. Defaults to \code{min(p, 1000)}.}
 
 \item{verbose}{Logical for verbose output.}
 }

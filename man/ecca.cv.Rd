@@ -2,7 +2,7 @@
 % Please edit documentation in R/ecca.r
 \name{ecca.cv}
 \alias{ecca.cv}
-\title{Sparse Canonical Correlation via Reduced-Rank Regression when both X and Y are high-dimensional, with Cross-Validation}
+\title{Cross-Validated Efficient CCA}
 \usage{
 ecca.cv(
   X,
@@ -15,62 +15,73 @@ ecca.cv(
   B0 = NULL,
   nfold = 5,
   select = "lambda.min",
-  eps = 1e-04,
-  maxiter = 500,
+  eps = 0.001,
+  maxiter = 1000,
   verbose = FALSE,
+  maxiter_cv = 300,
   parallel = FALSE,
   nb_cores = NULL,
   set_seed_cv = NULL,
-  scoring_method = "mse",
-  cv_use_median = FALSE
+  scoring_method = c("mse", "trace"),
+  cv_use_median = FALSE,
+  dense = TRUE,
+  optimized = FALSE,
+  epsilon_sv = 1e-08,
+  ridge_whiten = 1e-08
 )
 }
 \arguments{
-\item{X}{Predictor matrix (n x p)}
+\item{X}{Predictor matrix (n x p).}
 
-\item{Y}{Response matrix (n x q)}
+\item{Y}{Response matrix (n x q).}
 
-\item{lambdas}{Choice of regularization parameter}
+\item{lambdas}{Candidate regularization values.}
 
-\item{groups}{List of index vectors defining groups of predictors}
+\item{groups}{Optional group structure for blockwise sparsity.}
 
-\item{r}{Target rank}
+\item{r}{Target rank.}
 
-\item{standardize}{Whether to scale variables}
+\item{standardize}{Whether to scale variables after centering.}
 
-\item{rho}{ADMM parameter}
+\item{rho}{ADMM penalty parameter.}
 
-\item{B0}{Initial value for the coefficient matrix (optional)}
+\item{B0}{Optional warm start for the coefficient matrix.}
 
-\item{nfold}{Number of cross-validation folds}
+\item{nfold}{Number of cross-validation folds.}
 
-\item{select}{Which lambda to select: "lambda.min" or "lambda.1se"}
+\item{select}{Selection rule for the final lambda. One of \code{"lambda.min"} or \code{"lambda.1se"}.}
 
-\item{eps}{Convergence threshold for ADMM}
+\item{eps}{Convergence tolerance for the final ADMM refit.}
 
-\item{maxiter}{Maximum number of ADMM iterations}
+\item{maxiter}{Maximum iterations for the final ADMM refit.}
 
-\item{verbose}{Print diagnostics}
+\item{verbose}{Whether to print diagnostics.}
 
-\item{parallel}{Whether to run cross-validation in parallel}
+\item{maxiter_cv}{Maximum iterations used inside the cross-validation fits.}
 
-\item{nb_cores}{Number of cores to use for parallel processing (default is NULL, which uses all available cores)}
+\item{parallel}{Whether to parallelize cross-validation.}
 
-\item{set_seed_cv}{Optional seed for reproducibility of cross-validation folds (de)}
+\item{nb_cores}{Number of worker processes to use when \code{parallel = TRUE}.}
 
-\item{scoring_method}{Method to score the model during cross-validation, either "mse" (mean squared error) or "trace" (trace of the product of matrices)}
+\item{set_seed_cv}{Optional random seed for fold generation.}
 
-\item{cv_use_median}{Whether to use the median of the cross-validation scores instead of the mean. Default is FALSE.}
+\item{scoring_method}{Cross-validation score to optimize. One of \code{"mse"} or \code{"trace"}.}
+
+\item{cv_use_median}{Whether to aggregate fold scores with the median instead of the mean.}
+
+\item{dense}{Retained for backward compatibility.}
+
+\item{optimized}{Retained for backward compatibility.}
+
+\item{epsilon_sv}{Numerical threshold used to discard near-zero singular values.}
+
+\item{ridge_whiten}{Ridge added when whitening Gram matrices.}
 }
 \value{
-A list with elements:
-\describe{
-\item{U}{Canonical direction matrix for X (p x r)}
-\item{V}{Canonical direction matrix for Y (q x r)}
-\item{cor}{Canonical covariances}
-\item{loss}{The prediction error 1/n * \| XU - YV\|^2}
-}
+A list with the final fit, selected lambda, and cross-validation
+scores when more than one lambda is supplied.
 }
 \description{
-Performs group-sparse reduced-rank regression for CCA using either ADMM or CVXR solvers.
+Selects a regularization parameter for \code{\link[=ecca]{ecca()}} by cross-validation and
+refits the final model at the selected value.
 }

@@ -9,14 +9,20 @@ cca_rrr_cv(
   Y,
   r = 2,
   lambdas = 10^seq(-3, 1.5, length.out = 100),
-  kfolds = 14,
+  kfolds = 10,
   solver = "ADMM",
+  mode = "sqrtm_norm",
   parallelize = FALSE,
   LW_Sy = TRUE,
-  standardize = TRUE,
+  standardize = FALSE,
+  preprocess = NULL,
+  cv_metric = "mse",
   rho = 1,
-  thresh_0 = 1e-06,
+  thresh_0 = 0,
   niter = 10000,
+  matrix_free_threshold = 4000L,
+  cg_tol = 1e-06,
+  cg_maxiter = NULL,
   thresh = 1e-04,
   verbose = FALSE,
   nb_cores = NULL
@@ -33,13 +39,31 @@ cca_rrr_cv(
 
 \item{kfolds}{Number of folds for cross-validation.}
 
-\item{solver}{Solver type: "rrr", "CVX", or "ADMM".}
+\item{solver}{Solver type: "rrr", "CVX", or "ADMM". The \code{"CVX"} backend
+requires the optional package \code{CVXR}.}
+
+\item{mode}{Mode for postprocessing the RRR solution. One of \code{"sqrtm_norm"}
+(default) or \code{"product_norm"}. Legacy aliases \code{"new"} and \code{"old"} are
+also accepted. The former whitens the canonical variates to have identity
+covariance, while the latter does not whiten and instead returns the raw
+SVD factors of the RRR solution. The \code{"product_norm"} mode may be more
+interpretable in some cases but can yield canonical variates with very
+different scales and is not guaranteed to be numerically stable when the
+RRR solution is very low-rank or nearly low-rank.}
 
 \item{parallelize}{Logical; should cross-validation be parallelized?}
 
 \item{LW_Sy}{Whether to use Ledoit-Wolf shrinkage for Sy.}
 
-\item{standardize}{Logical; should X and Y be scaled.}
+\item{standardize}{Backward-compatible preprocessing flag: TRUE = \code{"scale"}, FALSE = \code{"center"}.}
+
+\item{preprocess}{Preprocessing mode. One of \code{"scale"} (center + scale), \code{"center"} (center only), or \code{"none"}.
+Logical values are still accepted for backward compatibility: \code{TRUE} uses \code{standardize}, \code{FALSE} skips preprocessing.
+Data are preprocessed once up front, and fold fits reuse those transformed matrices without re-centering or re-scaling inside each fold.}
+
+\item{cv_metric}{Cross-validation metric. Use \code{"mse"} to minimize held-out prediction
+error or \code{"correlation"} to maximize held-out association between \code{X \%*\% U}
+and \code{Y \%*\% V}.}
 
 \item{rho}{ADMM parameter.}
 
@@ -47,20 +71,41 @@ cca_rrr_cv(
 
 \item{niter}{Maximum number of iterations for ADMM.}
 
+\item{matrix_free_threshold}{For ADMM: when both \code{n} and \code{p} are at least this value, use a matrix-free conjugate-gradient solve instead of forming a dense linear system.}
+
+\item{cg_tol}{Relative tolerance for the matrix-free conjugate-gradient solve used in ADMM.}
+
+\item{cg_maxiter}{Maximum iterations for the matrix-free conjugate-gradient solve. Defaults to \code{min(p, 1000)}.}
+
 \item{thresh}{Convergence threshold.}
 
 \item{verbose}{Logical for verbose output.}
 
-\item{nb_cores}{Number of cores to use for parallelization (default is all available cores minus 1)}
+\item{nb_cores}{Number of cores to use for parallelization. Defaults to min(kfolds, available cores minus 1).}
 }
 \value{
 A list with elements:
-\itemize{
-\item U: Canonical direction matrix for X (p x r)
-\item V: Canonical direction matrix for Y (q x r)
-\item lambda: Optimal regularisation parameter lambda chosen by CV
-\item rmse: Mean squared error of prediction (as computed in the CV)
-\item cor: Canonical correlations
+\describe{
+\item{U}{Canonical direction matrix for X (p x r)}
+\item{V}{Canonical direction matrix for Y (q x r)}
+\item{lambda}{Optimal regularisation parameter lambda chosen by CV}
+\item{rmse}{Backward-compatible optimization objective. For \code{cv_metric = "mse"}
+this is the held-out mean squared error; for \code{cv_metric = "correlation"} it is
+\code{-cv_score} so that smaller still means better.}
+\item{cv_score}{Raw held-out cross-validation score averaged across folds.}
+\item{cv_metric}{The metric used to score lambdas during cross-validation.}
+\item{cor}{Canonical correlations at the selected lambda}
+\item{lambda_x}{Alias of the selected \code{lambda}}
+\item{lambda_x_se}{Foldwise standard error at the selected \code{lambda}}
+\item{lambda_y}{Placeholder for symmetry with two-penalty interfaces}
+\item{lambda_y_se}{Placeholder for symmetry with two-penalty interfaces}
+\item{resultsx}{Backward-compatible alias of \code{cv_summary}}
+\item{cv_summary}{Data frame with one row per lambda containing the mean CV score
+and its foldwise standard error.}
+\item{cv_folds}{Data frame with fold-level CV scores for each lambda.}
+\item{Lambda}{Canonical correlations from the final fit}
+\item{B}{Estimated reduced-rank coefficient matrix from the final fit}
+\item{fit}{Final fit at the selected lambda}
 }
 }
 \description{
