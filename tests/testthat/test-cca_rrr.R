@@ -46,7 +46,7 @@ test_that("cca_rrr returns the correct answer", {
 
 test_that("cca_rrr computes the same solutions across solvers", {
   set.seed(123)
-  skip_if_not_installed("CVXR")
+  skip_if_no_cvxr_conic_solver()
 
 
   r = 3
